@@ -1,0 +1,1454 @@
+---
+title: "CaseStudy2"
+author: "Nicholas Mueller"
+date: "2023-04-11"
+output: html_document
+---
+Intoduction:
+Welcome to Nicholas Mueller's case study for doing data science. I have been hired by a DDSAnalytics company to identigy high-potential employees and reducing/preventing voluntary employee turnover(Attrition). The analytics company would like me to review their data and provide them with the top 3 factors that lead to attrition, job specific trends, interesting finding along the way, and to run 2 models to predict future attrition and monthly incomes. In order to provide the best information I will dive deep into their data and run several alterations so that we can statisticall and visually see areas of importance.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Load Libraries and data
+```{r}
+library(gridExtra)
+library(dplyr)
+library(ggplot2)
+library(tm) #text mining library provides the stopwords() function
+library(tidyr)
+library(jsonlite)
+library(dplyr)
+library(tidyverse)
+library(class)
+library(caret)
+library(e1071)
+library(ggthemes)
+```
+These libraries will help us plot and manipulate our data so that we can visually present appropriate findings
+
+Call in our data
+```{r}
+## Original data
+url1="https://raw.githubusercontent.com/NickMueller2/MSDS_6306_Doing-Data-Science/Master/Unit%2014%20and%2015%20Case%20Study%202/CaseStudy2-data.csv"
+CaseStudy<-read.csv(url1)
+
+## Comp no attrition
+url2="https://raw.githubusercontent.com/NickMueller2/MSDS_6306_Doing-Data-Science/Master/Unit%2014%20and%2015%20Case%20Study%202/CaseStudy2CompSet%20No%20Attrition.csv"
+NoAttrition<-read.csv(url2)
+
+##Comp no Salary CSV
+url3="https://raw.githubusercontent.com/NickMueller2/Unit-1/main/CaseStudy2CompSet%20No%20Salary%20(1).csv"
+NoSalary<-read.csv(url3)
+
+#Comp No Salary CSV (Linear Model)
+url4="https://raw.githubusercontent.com/NickMueller2/Unit-1/main/CaseStudy2CompSet%20No%20Salary%20(1).csv"
+NoSalary2<-read.csv(url4)
+
+## Original data (Linear Model)
+url5="https://raw.githubusercontent.com/NickMueller2/MSDS_6306_Doing-Data-Science/Master/Unit%2014%20and%2015%20Case%20Study%202/CaseStudy2-data.csv"
+CaseStudy3<-read.csv(url5)
+
+##add MonthlyIncome so that we can combine and examine attrition better
+NoSalary$MonthlyIncome <- rep(".", nrow(NoSalary))
+
+# Combine the datasets vertically
+CaseStudy2 <- rbind(CaseStudy, NoSalary)
+
+#Replace yes and no with 1 and 0
+CaseStudy2$Attrition_num<- ifelse(CaseStudy2$Attrition == "Yes", 1, 0)
+
+
+
+```
+I was able to call in our data so that I am able to change and visually present observations
+
+Manipulating main data set for visualizations
+```{r}
+#remove repeating data
+#Removed Employee count
+CaseStudy2 <- CaseStudy2[, -10]
+
+#Removed Over18
+CaseStudy2 <- CaseStudy2[, -22]
+
+#Removed StandardHours
+CaseStudy2 <- CaseStudy2[, -26]
+
+
+#Review stats for numeric features (mean, min, max, std dev, unique counts)
+#Replacing 1-4 with low, medium, high, very high
+#Includes EnvironmentSatisfaction,JobInvolvement, JobSatisfaction, PerformanceRating, RelationshipSatisfaction, and WorkLifeBalance
+
+CaseStudy2$EnvironmentSatisfaction <- factor(ifelse(CaseStudy2$EnvironmentSatisfaction == 1, "low",
+                                                    ifelse(CaseStudy2$EnvironmentSatisfaction == 2, "medium",
+                                                           ifelse(CaseStudy2$EnvironmentSatisfaction == 3, "high",
+                                                                  ifelse(CaseStudy2$EnvironmentSatisfaction== 4, "very high", "NA")))),
+                                             levels = c("low", "medium", "high", "very high", "NA"))
+
+CaseStudy2$JobInvolvement <- factor(ifelse(CaseStudy2$JobInvolvement == 1, "low",
+                                           ifelse(CaseStudy2$JobInvolvement == 2, "medium",
+                                                  ifelse(CaseStudy2$JobInvolvement == 3, "high",
+                                                         ifelse(CaseStudy2$JobInvolvement== 4, "very high", "NA")))),
+                                    levels = c("low", "medium", "high", "very high", "NA"))
+
+CaseStudy2$JobSatisfaction <- factor(ifelse(CaseStudy2$JobSatisfaction == 1, "low",
+                                            ifelse(CaseStudy2$JobSatisfaction == 2, "medium",
+                                                   ifelse(CaseStudy2$JobSatisfaction == 3, "high",
+                                                          ifelse(CaseStudy2$JobSatisfaction== 4, "very high", "NA")))),
+                                     levels = c("low", "medium", "high", "very high", "NA"))
+
+CaseStudy2$PerformanceRating <- factor(ifelse(CaseStudy2$PerformanceRating == 1, "low",
+                                              ifelse(CaseStudy2$PerformanceRating == 2, "medium",
+                                                     ifelse(CaseStudy2$PerformanceRating == 3, "high",
+                                                            ifelse(CaseStudy2$PerformanceRating== 4, "very high", "NA")))),
+                                       levels = c("low", "medium", "high", "very high", "NA"))
+
+CaseStudy2$RelationshipSatisfaction <- factor(ifelse(CaseStudy2$RelationshipSatisfaction == 1, "low",
+                                                     ifelse(CaseStudy2$RelationshipSatisfaction == 2, "medium",
+                                                            ifelse(CaseStudy2$RelationshipSatisfaction == 3, "high",
+                                                                   ifelse(CaseStudy2$RelationshipSatisfaction== 4, "very high", "NA")))),
+                                              levels = c("low", "medium", "high", "very high", "NA"))
+
+CaseStudy2$WorkLifeBalance <- factor(ifelse(CaseStudy2$WorkLifeBalance == 1, "low",
+                                            ifelse(CaseStudy2$WorkLifeBalance == 2, "medium",
+                                                   ifelse(CaseStudy2$WorkLifeBalance == 3, "high",
+                                                          ifelse(CaseStudy2$WorkLifeBalance== 4, "very high", "NA")))),
+                                     levels = c("low", "medium", "high", "very high", "NA"))
+
+
+#Put ages, DailyRate, MonthlyRate, HourlyRate, YearsAtCompany and DistanceFromHome into categories
+CaseStudy2$Age <- factor(ifelse(as.numeric(CaseStudy2$Age) %in% 18:28, "18 to 28",
+                                ifelse(as.numeric(CaseStudy2$Age) %in% 29:39, "29 to 39",
+                                       ifelse(as.numeric(CaseStudy2$Age) %in% 40:50, "40 to 50",
+                                              ifelse(as.numeric(CaseStudy2$Age) %in% 51:60, "51 to 60", "NA")))),
+                         levels = c("18 to 28", "29 to 39", "40 to 50", "51 to 60", "NA"))
+
+CaseStudy2$DistanceFromHome <- factor(ifelse(as.numeric(CaseStudy2$DistanceFromHome ) %in% 0:2, "<=2 miles",
+                                             ifelse(as.numeric(CaseStudy2$DistanceFromHome ) %in% 3:5, "3-5 miles",
+                                                    ifelse(as.numeric(CaseStudy2$DistanceFromHome ) %in% 6:9, "6-9 miles",
+                                                           ifelse(as.numeric(CaseStudy2$DistanceFromHome ) %in% 10:15, "10-15 miles", ">=16")))),
+                                      levels = c("<=2 miles", "3-5 miles", "6-9 miles", "10-15 miles", ">=16"))
+
+
+CaseStudy2$DailyRate <- factor(ifelse(as.numeric(CaseStudy2$DailyRate ) %in% 100:450, "Low(100-450)",
+                                      ifelse(as.numeric(CaseStudy2$DailyRate ) %in% 451:800, "Medium (451-800)",
+                                             ifelse(as.numeric(CaseStudy2$DailyRate ) %in% 801:1150, "High (801-1150)",
+                                                    ifelse(as.numeric(CaseStudy2$DailyRate ) %in% 1151:1500, "Very High (1151-1500)", "NA")))),
+                               levels = c("Low(100-450)", "Medium (451-800)", "High (801-1150)", "Very High (1151-1500)", "NA"))
+
+CaseStudy2$MonthlyIncome <- factor(ifelse(as.numeric(CaseStudy2$MonthlyIncome ) %in% 1000:4000, "Low(1000-4000)",
+                                          ifelse(as.numeric(CaseStudy2$MonthlyIncome ) %in% 4001:7000, "low-Medium (4001-7000)",
+                                                 ifelse(as.numeric(CaseStudy2$MonthlyIncome) %in% 7001:10000, "Medium (7001-10000)",
+                                                        ifelse(as.numeric(CaseStudy2$MonthlyIncome ) %in% 10001:13000, "Medium-High (10001-13000)",
+                                                               ifelse(as.numeric(CaseStudy2$MonthlyIncome ) %in% 13001:16000, "High (13001-16000)",
+                                                                      ifelse(as.numeric(CaseStudy2$MonthlyIncome ) %in% 16001:19999, "Very High (16001-19999)","NA")))))),
+                                   levels = c("Low(1000-4000)", "low-Medium (4001-7000)", "Medium (7001-10000)", "Medium-High (10001-13000)", "High (13001-16000)","Very High (16001-19999)","NA"))
+
+CaseStudy2$HourlyRate <- factor(ifelse(as.numeric(CaseStudy2$HourlyRate ) %in% 0:40, "Low(0-40)",
+                                       ifelse(as.numeric(CaseStudy2$HourlyRate ) %in% 41:60, "Medium (41-60)",
+                                              ifelse(as.numeric(CaseStudy2$HourlyRate ) %in% 61:80, "High (61-80)",
+                                                     ifelse(as.numeric(CaseStudy2$HourlyRate ) %in% 81:110, "Very High (81-110)", "NA")))),
+                                levels = c("Low(0-40)", "Medium (41-60)", "High (61-80)", "Very High (81-110)", "NA"))
+
+
+CaseStudy2$YearsAtCompany <- factor(ifelse(as.numeric(CaseStudy2$YearsAtCompany ) %in% 0:5, "Low(0-5 Years)",
+                                           ifelse(as.numeric(CaseStudy2$YearsAtCompany) %in% 6:10, "low-Medium (6-10 Years)",
+                                                  ifelse(as.numeric(CaseStudy2$YearsAtCompany) %in% 11:15, "Medium (11-15 Years)",
+                                                         ifelse(as.numeric(CaseStudy2$YearsAtCompany) %in% 16:20, "Medium-High (16-20 Years)",
+                                                                ifelse(as.numeric(CaseStudy2$YearsAtCompany) %in% 21:25, "High (21-25 Years)",
+                                                                       ifelse(as.numeric(CaseStudy2$YearsAtCompany) %in% 26:30, "Very High (26-30 Years)",">30 Years")))))),
+                                    levels = c("Low(0-5 Years)", "low-Medium (6-10 Years)", "Medium (11-15 Years)", "Medium-High (16-20 Years)", "High (21-25 Years)","Very High (26-30 Years)",">30 Years"))
+
+
+```
+Here we changed majority of the numeric variables into catigories so that we are able to visually see trends on a histogram. We also changed some catigories from 1 to 4 into low, medium, high, and very high.
+
+Altering Attrition prediction set so that it matches our main data set for predictions
+```{r}
+#remove repeating data
+#Removed Employee count
+NoAttrition <- NoAttrition[, -9]
+
+#Removed Over18
+NoAttrition <- NoAttrition[, -21]
+
+#Removed StandardHours
+NoAttrition <- NoAttrition[, -25]
+
+
+#Review stats for numeric features (mean, min, max, std dev, unique counts)
+#Replacing 1-4 with low, medium, high, very high
+#Includes EnvironmentSatisfaction,JobInvolvement, JobSatisfaction, PerformanceRating, RelationshipSatisfaction, and WorkLifeBalance
+
+NoAttrition $EnvironmentSatisfaction <- factor(ifelse(NoAttrition $EnvironmentSatisfaction == 1, "low",
+                                                      ifelse(NoAttrition $EnvironmentSatisfaction == 2, "medium",
+                                                             ifelse(NoAttrition$EnvironmentSatisfaction == 3, "high",
+                                                                    ifelse(NoAttrition$EnvironmentSatisfaction== 4, "very high", "NA")))),
+                                               levels = c("low", "medium", "high", "very high", "NA"))
+
+NoAttrition $JobInvolvement <- factor(ifelse(NoAttrition $JobInvolvement == 1, "low",
+                                             ifelse(NoAttrition $JobInvolvement == 2, "medium",
+                                                    ifelse(NoAttrition $JobInvolvement == 3, "high",
+                                                           ifelse(NoAttrition $JobInvolvement== 4, "very high", "NA")))),
+                                      levels = c("low", "medium", "high", "very high", "NA"))
+
+NoAttrition $JobSatisfaction <- factor(ifelse(NoAttrition $JobSatisfaction == 1, "low",
+                                              ifelse(NoAttrition $JobSatisfaction == 2, "medium",
+                                                     ifelse(NoAttrition $JobSatisfaction == 3, "high",
+                                                            ifelse(NoAttrition $JobSatisfaction== 4, "very high", "NA")))),
+                                       levels = c("low", "medium", "high", "very high", "NA"))
+
+NoAttrition $PerformanceRating <- factor(ifelse(NoAttrition $PerformanceRating == 1, "low",
+                                                ifelse(NoAttrition $PerformanceRating == 2, "medium",
+                                                       ifelse(NoAttrition $PerformanceRating == 3, "high",
+                                                              ifelse(NoAttrition $PerformanceRating== 4, "very high", "NA")))),
+                                         levels = c("low", "medium", "high", "very high", "NA"))
+
+NoAttrition $RelationshipSatisfaction <- factor(ifelse(NoAttrition$RelationshipSatisfaction == 1, "low",
+                                                       ifelse(NoAttrition $RelationshipSatisfaction == 2, "medium",
+                                                              ifelse(NoAttrition $RelationshipSatisfaction == 3, "high",
+                                                                     ifelse(NoAttrition $RelationshipSatisfaction== 4, "very high", "NA")))),
+                                                levels = c("low", "medium", "high", "very high", "NA"))
+
+NoAttrition $WorkLifeBalance <- factor(ifelse(NoAttrition $WorkLifeBalance == 1, "low",
+                                              ifelse(NoAttrition $WorkLifeBalance == 2, "medium",
+                                                     ifelse(NoAttrition $WorkLifeBalance == 3, "high",
+                                                            ifelse(NoAttrition $WorkLifeBalance== 4, "very high", "NA")))),
+                                       levels = c("low", "medium", "high", "very high", "NA"))
+
+
+#Put ages, DailyRate, MonthlyRate, HourlyRate, YearsAtCompany and DistanceFromHome into categories
+NoAttrition $Age <- factor(ifelse(as.numeric(NoAttrition $Age) %in% 18:28, "18 to 28",
+                                  ifelse(as.numeric(NoAttrition $Age) %in% 29:39, "29 to 39",
+                                         ifelse(as.numeric(NoAttrition $Age) %in% 40:50, "40 to 50",
+                                                ifelse(as.numeric(NoAttrition $Age) %in% 51:60, "51 to 60", "NA")))),
+                           levels = c("18 to 28", "29 to 39", "40 to 50", "51 to 60", "NA"))
+
+NoAttrition $DistanceFromHome <- factor(ifelse(as.numeric(NoAttrition $DistanceFromHome ) %in% 0:2, "<=2 miles",
+                                               ifelse(as.numeric(NoAttrition $DistanceFromHome ) %in% 3:5, "3-5 miles",
+                                                      ifelse(as.numeric(NoAttrition $DistanceFromHome ) %in% 6:9, "6-9 miles",
+                                                             ifelse(as.numeric(NoAttrition $DistanceFromHome ) %in% 10:15, "10-15 miles", ">=16")))),
+                                        levels = c("<=2 miles", "3-5 miles", "6-9 miles", "10-15 miles", ">=16"))
+
+
+NoAttrition $DailyRate <- factor(ifelse(as.numeric(NoAttrition $DailyRate ) %in% 100:450, "Low(100-450)",
+                                        ifelse(as.numeric(NoAttrition $DailyRate ) %in% 451:800, "Medium (451-800)",
+                                               ifelse(as.numeric(NoAttrition $DailyRate ) %in% 801:1150, "High (801-1150)",
+                                                      ifelse(as.numeric(NoAttrition $DailyRate ) %in% 1151:1500, "Very High (1151-1500)", "NA")))),
+                                 levels = c("Low(100-450)", "Medium (451-800)", "High (801-1150)", "Very High (1151-1500)", "NA"))
+
+NoAttrition $MonthlyIncome <- factor(ifelse(as.numeric(NoAttrition $MonthlyIncome ) %in% 1000:4000, "Low(1000-4000)",
+                                            ifelse(as.numeric(NoAttrition $MonthlyIncome ) %in% 4001:7000, "low-Medium (4001-7000)",
+                                                   ifelse(as.numeric(NoAttrition $MonthlyIncome) %in% 7001:10000, "Medium (7001-10000)",
+                                                          ifelse(as.numeric(NoAttrition $MonthlyIncome ) %in% 10001:13000, "Medium-High (10001-13000)",
+                                                                 ifelse(as.numeric(NoAttrition $MonthlyIncome ) %in% 13001:16000, "High (13001-16000)",
+                                                                        ifelse(as.numeric(NoAttrition $MonthlyIncome ) %in% 16001:19999, "Very High (16001-19999)","NA")))))),
+                                     levels = c("Low(1000-4000)", "low-Medium (4001-7000)", "Medium (7001-10000)", "Medium-High (10001-13000)", "High (13001-16000)","Very High (16001-19999)","NA"))
+
+NoAttrition $HourlyRate <- factor(ifelse(as.numeric(NoAttrition $HourlyRate ) %in% 0:40, "Low(0-40)",
+                                         ifelse(as.numeric(NoAttrition $HourlyRate ) %in% 41:60, "Medium (41-60)",
+                                                ifelse(as.numeric(NoAttrition $HourlyRate ) %in% 61:80, "High (61-80)",
+                                                       ifelse(as.numeric(NoAttrition $HourlyRate ) %in% 81:110, "Very High (81-110)", "NA")))),
+                                  levels = c("Low(0-40)", "Medium (41-60)", "High (61-80)", "Very High (81-110)", "NA"))
+
+
+NoAttrition $YearsAtCompany <- factor(ifelse(as.numeric(NoAttrition $YearsAtCompany ) %in% 0:5, "Low(0-5 Years)",
+                                             ifelse(as.numeric(NoAttrition $YearsAtCompany) %in% 6:10, "low-Medium (6-10 Years)",
+                                                    ifelse(as.numeric(NoAttrition $YearsAtCompany) %in% 11:15, "Medium (11-15 Years)",
+                                                           ifelse(as.numeric(NoAttrition $YearsAtCompany) %in% 16:20, "Medium-High (16-20 Years)",
+                                                                  ifelse(as.numeric(NoAttrition $YearsAtCompany) %in% 21:25, "High (21-25 Years)",
+                                                                         ifelse(as.numeric(NoAttrition $YearsAtCompany) %in% 26:30, "Very High (26-30 Years)",">30 Years")))))),
+                                      levels = c("Low(0-5 Years)", "low-Medium (6-10 Years)", "Medium (11-15 Years)", "Medium-High (16-20 Years)", "High (21-25 Years)","Very High (26-30 Years)",">30 Years"))
+
+
+```
+We again changed numeric values into catigorical values for histogram visualization. We must make this change in order to stay similar with our main data set for furture predictions.
+
+Second Main Dataset for the linear regression model
+```{r}
+###CLEANING CaseStudy
+#Replace yes and no with 1 and 0
+CaseStudy$Attrition_num<- ifelse(CaseStudy$Attrition == "Yes", 1, 0)
+
+
+
+
+
+#remove repeating data
+#Removed Employee count
+CaseStudy <- CaseStudy[, -10]
+
+#Removed Over18
+CaseStudy <- CaseStudy[, -22]
+
+#Removed StandardHours
+CaseStudy <- CaseStudy[, -26]
+
+
+#Includes EnvironmentSatisfaction,JobInvolvement, JobSatisfaction, PerformanceRating, RelationshipSatisfaction, and WorkLifeBalance
+
+CaseStudy$EnvironmentSatisfaction <- factor(ifelse(CaseStudy$EnvironmentSatisfaction == 1, "low",
+                                                   ifelse(CaseStudy$EnvironmentSatisfaction == 2, "medium",
+                                                          ifelse(CaseStudy$EnvironmentSatisfaction == 3, "high",
+                                                                 ifelse(CaseStudy$EnvironmentSatisfaction== 4, "very high", "NA")))),
+                                            levels = c("low", "medium", "high", "very high", "NA"))
+
+CaseStudy$JobInvolvement <- factor(ifelse(CaseStudy$JobInvolvement == 1, "low",
+                                          ifelse(CaseStudy$JobInvolvement == 2, "medium",
+                                                 ifelse(CaseStudy$JobInvolvement == 3, "high",
+                                                        ifelse(CaseStudy$JobInvolvement== 4, "very high", "NA")))),
+                                   levels = c("low", "medium", "high", "very high", "NA"))
+
+CaseStudy$JobSatisfaction <- factor(ifelse(CaseStudy$JobSatisfaction == 1, "low",
+                                           ifelse(CaseStudy$JobSatisfaction == 2, "medium",
+                                                  ifelse(CaseStudy$JobSatisfaction == 3, "high",
+                                                         ifelse(CaseStudy$JobSatisfaction== 4, "very high", "NA")))),
+                                    levels = c("low", "medium", "high", "very high", "NA"))
+
+CaseStudy$PerformanceRating <- factor(ifelse(CaseStudy$PerformanceRating == 1, "low",
+                                             ifelse(CaseStudy$PerformanceRating == 2, "medium",
+                                                    ifelse(CaseStudy$PerformanceRating == 3, "high",
+                                                           ifelse(CaseStudy$PerformanceRating== 4, "very high", "NA")))),
+                                      levels = c("low", "medium", "high", "very high", "NA"))
+
+CaseStudy$RelationshipSatisfaction <- factor(ifelse(CaseStudy$RelationshipSatisfaction == 1, "low",
+                                                    ifelse(CaseStudy$RelationshipSatisfaction == 2, "medium",
+                                                           ifelse(CaseStudy$RelationshipSatisfaction == 3, "high",
+                                                                  ifelse(CaseStudy$RelationshipSatisfaction== 4, "very high", "NA")))),
+                                             levels = c("low", "medium", "high", "very high", "NA"))
+
+CaseStudy$WorkLifeBalance <- factor(ifelse(CaseStudy$WorkLifeBalance == 1, "low",
+                                           ifelse(CaseStudy$WorkLifeBalance == 2, "medium",
+                                                  ifelse(CaseStudy$WorkLifeBalance == 3, "high",
+                                                         ifelse(CaseStudy$WorkLifeBalance== 4, "very high", "NA")))),
+                                    levels = c("low", "medium", "high", "very high", "NA"))
+
+
+#Put ages, DailyRate, MonthlyRate, HourlyRate, YearsAtCompany and DistanceFromHome into categories
+CaseStudy$Age <- factor(ifelse(as.numeric(CaseStudy$Age) %in% 18:28, "18 to 28",
+                               ifelse(as.numeric(CaseStudy$Age) %in% 29:39, "29 to 39",
+                                      ifelse(as.numeric(CaseStudy$Age) %in% 40:50, "40 to 50",
+                                             ifelse(as.numeric(CaseStudy$Age) %in% 51:60, "51 to 60", "NA")))),
+                        levels = c("18 to 28", "29 to 39", "40 to 50", "51 to 60", "NA"))
+
+CaseStudy$DistanceFromHome <- factor(ifelse(as.numeric(CaseStudy$DistanceFromHome ) %in% 0:2, "<=2 miles",
+                                            ifelse(as.numeric(CaseStudy$DistanceFromHome ) %in% 3:5, "3-5 miles",
+                                                   ifelse(as.numeric(CaseStudy$DistanceFromHome ) %in% 6:9, "6-9 miles",
+                                                          ifelse(as.numeric(CaseStudy$DistanceFromHome ) %in% 10:15, "10-15 miles", ">=16")))),
+                                     levels = c("<=2 miles", "3-5 miles", "6-9 miles", "10-15 miles", ">=16"))
+
+
+CaseStudy$DailyRate <- factor(ifelse(as.numeric(CaseStudy$DailyRate ) %in% 100:450, "Low(100-450)",
+                                     ifelse(as.numeric(CaseStudy$DailyRate ) %in% 451:800, "Medium (451-800)",
+                                            ifelse(as.numeric(CaseStudy$DailyRate ) %in% 801:1150, "High (801-1150)",
+                                                   ifelse(as.numeric(CaseStudy$DailyRate ) %in% 1151:1500, "Very High (1151-1500)", "NA")))),
+                              levels = c("Low(100-450)", "Medium (451-800)", "High (801-1150)", "Very High (1151-1500)", "NA"))
+
+CaseStudy$MonthlyIncome <- factor(ifelse(as.numeric(CaseStudy$MonthlyIncome ) %in% 1000:4000, "Low(1000-4000)",
+                                         ifelse(as.numeric(CaseStudy$MonthlyIncome ) %in% 4001:7000, "low-Medium (4001-7000)",
+                                                ifelse(as.numeric(CaseStudy$MonthlyIncome) %in% 7001:10000, "Medium (7001-10000)",
+                                                       ifelse(as.numeric(CaseStudy$MonthlyIncome ) %in% 10001:13000, "Medium-High (10001-13000)",
+                                                              ifelse(as.numeric(CaseStudy$MonthlyIncome ) %in% 13001:16000, "High (13001-16000)",
+                                                                     ifelse(as.numeric(CaseStudy$MonthlyIncome ) %in% 16001:19999, "Very High (16001-19999)","NA")))))),
+                                  levels = c("Low(1000-4000)", "low-Medium (4001-7000)", "Medium (7001-10000)", "Medium-High (10001-13000)", "High (13001-16000)","Very High (16001-19999)","NA"))
+
+CaseStudy$HourlyRate <- factor(ifelse(as.numeric(CaseStudy$HourlyRate ) %in% 0:40, "Low(0-40)",
+                                      ifelse(as.numeric(CaseStudy$HourlyRate ) %in% 41:60, "Medium (41-60)",
+                                             ifelse(as.numeric(CaseStudy$HourlyRate ) %in% 61:80, "High (61-80)",
+                                                    ifelse(as.numeric(CaseStudy$HourlyRate ) %in% 81:110, "Very High (81-110)", "NA")))),
+                               levels = c("Low(0-40)", "Medium (41-60)", "High (61-80)", "Very High (81-110)", "NA"))
+
+
+CaseStudy$YearsAtCompany <- factor(ifelse(as.numeric(CaseStudy$YearsAtCompany ) %in% 0:5, "Low(0-5 Years)",
+                                          ifelse(as.numeric(CaseStudy$YearsAtCompany) %in% 6:10, "low-Medium (6-10 Years)",
+                                                 ifelse(as.numeric(CaseStudy$YearsAtCompany) %in% 11:15, "Medium (11-15 Years)",
+                                                        ifelse(as.numeric(CaseStudy$YearsAtCompany) %in% 16:20, "Medium-High (16-20 Years)",
+                                                               ifelse(as.numeric(CaseStudy$YearsAtCompany) %in% 21:25, "High (21-25 Years)",
+                                                                      ifelse(as.numeric(CaseStudy$YearsAtCompany) %in% 26:30, "Very High (26-30 Years)",">30 Years")))))),
+                                   levels = c("Low(0-5 Years)", "low-Medium (6-10 Years)", "Medium (11-15 Years)", "Medium-High (16-20 Years)", "High (21-25 Years)","Very High (26-30 Years)",">30 Years"))
+
+
+```
+We made a secondary main data set becuase we will be running two model, one naive bayes and one linear regression. In order to stay organized with data manipulation we will make two seperate main data sets. In the code above we again changed some numeric variables into catigories.
+
+Cleaning the data set with no Monthly Income
+```{r}
+###CLEANING NoSalary
+
+#Replace yes and no with 1 and 0
+NoSalary$Attrition_num<- ifelse(NoSalary$Attrition == "Yes", 1, 0)
+
+
+#remove repeating data
+#Removed Employee count
+NoSalary <- NoSalary[, -10]
+
+#Removed Over18
+NoSalary <- NoSalary[, -21]
+
+#Removed StandardHours
+NoSalary <- NoSalary[, -25]
+
+
+
+#Includes EnvironmentSatisfaction,JobInvolvement, JobSatisfaction, PerformanceRating, RelationshipSatisfaction, and WorkLifeBalance
+
+NoSalary$EnvironmentSatisfaction <- factor(ifelse(NoSalary$EnvironmentSatisfaction == 1, "low",
+                                                  ifelse(NoSalary$EnvironmentSatisfaction == 2, "medium",
+                                                         ifelse(NoSalary$EnvironmentSatisfaction == 3, "high",
+                                                                ifelse(NoSalary$EnvironmentSatisfaction== 4, "very high", "NA")))),
+                                           levels = c("low", "medium", "high", "very high", "NA"))
+
+NoSalary$JobInvolvement <- factor(ifelse(NoSalary$JobInvolvement == 1, "low",
+                                         ifelse(NoSalary$JobInvolvement == 2, "medium",
+                                                ifelse(NoSalary$JobInvolvement == 3, "high",
+                                                       ifelse(NoSalary$JobInvolvement== 4, "very high", "NA")))),
+                                  levels = c("low", "medium", "high", "very high", "NA"))
+
+NoSalary$JobSatisfaction <- factor(ifelse(NoSalary$JobSatisfaction == 1, "low",
+                                          ifelse(NoSalary$JobSatisfaction == 2, "medium",
+                                                 ifelse(NoSalary$JobSatisfaction == 3, "high",
+                                                        ifelse(NoSalary$JobSatisfaction== 4, "very high", "NA")))),
+                                   levels = c("low", "medium", "high", "very high", "NA"))
+
+NoSalary$PerformanceRating <- factor(ifelse(NoSalary$PerformanceRating == 1, "low",
+                                            ifelse(NoSalary$PerformanceRating == 2, "medium",
+                                                   ifelse(NoSalary$PerformanceRating == 3, "high",
+                                                          ifelse(NoSalary$PerformanceRating== 4, "very high", "NA")))),
+                                     levels = c("low", "medium", "high", "very high", "NA"))
+
+NoSalary$RelationshipSatisfaction <- factor(ifelse(NoSalary$RelationshipSatisfaction == 1, "low",
+                                                   ifelse(NoSalary$RelationshipSatisfaction == 2, "medium",
+                                                          ifelse(NoSalary$RelationshipSatisfaction == 3, "high",
+                                                                 ifelse(NoSalary$RelationshipSatisfaction== 4, "very high", "NA")))),
+                                            levels = c("low", "medium", "high", "very high", "NA"))
+
+NoSalary$WorkLifeBalance <- factor(ifelse(NoSalary$WorkLifeBalance == 1, "low",
+                                          ifelse(NoSalary$WorkLifeBalance == 2, "medium",
+                                                 ifelse(NoSalary$WorkLifeBalance == 3, "high",
+                                                        ifelse(NoSalary$WorkLifeBalance== 4, "very high", "NA")))),
+                                   levels = c("low", "medium", "high", "very high", "NA"))
+
+
+#Put ages, DailyRate, MonthlyRate, HourlyRate, YearsAtCompany and DistanceFromHome into categories
+NoSalary$Age <- factor(ifelse(as.numeric(NoSalary$Age) %in% 18:28, "18 to 28",
+                              ifelse(as.numeric(NoSalary$Age) %in% 29:39, "29 to 39",
+                                     ifelse(as.numeric(NoSalary$Age) %in% 40:50, "40 to 50",
+                                            ifelse(as.numeric(NoSalary$Age) %in% 51:60, "51 to 60", "NA")))),
+                       levels = c("18 to 28", "29 to 39", "40 to 50", "51 to 60", "NA"))
+
+NoSalary$DistanceFromHome <- factor(ifelse(as.numeric(NoSalary$DistanceFromHome ) %in% 0:2, "<=2 miles",
+                                           ifelse(as.numeric(NoSalary$DistanceFromHome ) %in% 3:5, "3-5 miles",
+                                                  ifelse(as.numeric(NoSalary$DistanceFromHome ) %in% 6:9, "6-9 miles",
+                                                         ifelse(as.numeric(NoSalary$DistanceFromHome ) %in% 10:15, "10-15 miles", ">=16")))),
+                                    levels = c("<=2 miles", "3-5 miles", "6-9 miles", "10-15 miles", ">=16"))
+
+
+NoSalary$DailyRate <- factor(ifelse(as.numeric(NoSalary$DailyRate ) %in% 100:450, "Low(100-450)",
+                                    ifelse(as.numeric(NoSalary$DailyRate ) %in% 451:800, "Medium (451-800)",
+                                           ifelse(as.numeric(NoSalary$DailyRate ) %in% 801:1150, "High (801-1150)",
+                                                  ifelse(as.numeric(NoSalary$DailyRate ) %in% 1151:1500, "Very High (1151-1500)", "NA")))),
+                             levels = c("Low(100-450)", "Medium (451-800)", "High (801-1150)", "Very High (1151-1500)", "NA"))
+
+NoSalary$MonthlyIncome <- factor(ifelse(as.numeric(NoSalary$MonthlyIncome ) %in% 1000:4000, "Low(1000-4000)",
+                                        ifelse(as.numeric(NoSalary$MonthlyIncome ) %in% 4001:7000, "low-Medium (4001-7000)",
+                                               ifelse(as.numeric(NoSalary$MonthlyIncome) %in% 7001:10000, "Medium (7001-10000)",
+                                                      ifelse(as.numeric(NoSalary$MonthlyIncome ) %in% 10001:13000, "Medium-High (10001-13000)",
+                                                             ifelse(as.numeric(NoSalary$MonthlyIncome ) %in% 13001:16000, "High (13001-16000)",
+                                                                    ifelse(as.numeric(NoSalary$MonthlyIncome ) %in% 16001:19999, "Very High (16001-19999)","NA")))))),
+                                 levels = c("Low(1000-4000)", "low-Medium (4001-7000)", "Medium (7001-10000)", "Medium-High (10001-13000)", "High (13001-16000)","Very High (16001-19999)","NA"))
+
+NoSalary$HourlyRate <- factor(ifelse(as.numeric(NoSalary$HourlyRate ) %in% 0:40, "Low(0-40)",
+                                     ifelse(as.numeric(NoSalary$HourlyRate ) %in% 41:60, "Medium (41-60)",
+                                            ifelse(as.numeric(NoSalary$HourlyRate ) %in% 61:80, "High (61-80)",
+                                                   ifelse(as.numeric(NoSalary$HourlyRate ) %in% 81:110, "Very High (81-110)", "NA")))),
+                              levels = c("Low(0-40)", "Medium (41-60)", "High (61-80)", "Very High (81-110)", "NA"))
+
+
+NoSalary$YearsAtCompany <- factor(ifelse(as.numeric(NoSalary$YearsAtCompany ) %in% 0:5, "Low(0-5 Years)",
+                                         ifelse(as.numeric(NoSalary$YearsAtCompany) %in% 6:10, "low-Medium (6-10 Years)",
+                                                ifelse(as.numeric(NoSalary$YearsAtCompany) %in% 11:15, "Medium (11-15 Years)",
+                                                       ifelse(as.numeric(NoSalary$YearsAtCompany) %in% 16:20, "Medium-High (16-20 Years)",
+                                                              ifelse(as.numeric(NoSalary$YearsAtCompany) %in% 21:25, "High (21-25 Years)",
+                                                                     ifelse(as.numeric(NoSalary$YearsAtCompany) %in% 26:30, "Very High (26-30 Years)",">30 Years")))))),
+                                  levels = c("Low(0-5 Years)", "low-Medium (6-10 Years)", "Medium (11-15 Years)", "Medium-High (16-20 Years)", "High (21-25 Years)","Very High (26-30 Years)",">30 Years"))
+
+
+```
+Here we changed majority of the numeric variables into catigories so that we are able to visually see trends on a histogram. We also changed some catigories from 1 to 4 into low, medium, high, and very high.
+
+First plotting visualizations
+```{r}
+#FIRST Ploting
+
+AgeHisto <- CaseStudy2 %>% group_by(Age) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(Age), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Age") + ylab("Count") + theme_economist()+xlab("Age")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+GenderHisto <- CaseStudy2 %>% group_by(Gender) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(Gender), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Gender") + ylab("Count") + theme_economist()+xlab("Gender")
+
+MaritalStatusHisto <-CaseStudy2 %>% group_by(MaritalStatus) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(MaritalStatus), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Marital Status") + ylab("Count") + theme_economist()+xlab("Marital Status")
+
+EducationHisto <- CaseStudy2 %>% group_by(Education) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(Education), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Education") + ylab("Count") + theme_economist()+xlab("Education")
+
+EducationFieldHisto <- CaseStudy2 %>% group_by(EducationField) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(EducationField), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Education Field") + ylab("Count") + theme_economist()+xlab("EducationField")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+DistanceFromHomeHisto <- CaseStudy2 %>% group_by(DistanceFromHome) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(DistanceFromHome), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Distance From Home") + ylab("Count") + theme_economist()+xlab("Distance From Home")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+grid.arrange(AgeHisto, GenderHisto, MaritalStatusHisto, EducationHisto, EducationFieldHisto,DistanceFromHomeHisto, nrow = 2, ncol = 3)
+
+```
+Here we plotted a histogram of Age, Gender, Marital Status, Education, EducationField, and DistanceFromHome. We are able to see trends and use these trends to predict attrition in the future.
+
+Second Plotting 
+```{r}
+#SECOND Ploting
+BusinessTravelHisto <- CaseStudy2 %>% group_by(BusinessTravel) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(BusinessTravel), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Business Travel") + ylab("Count") + theme_economist()+xlab("Business Travel")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+DailyRateHisto <- CaseStudy2 %>% group_by(DailyRate) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(DailyRate), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Daily Rate") + ylab("Count") + theme_economist()+xlab("Daily Rate")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+DepartmentHisto <- CaseStudy2 %>% group_by(Department) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(Department), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Department") + ylab("Count") + theme_economist()+xlab("Department")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+EnvironmentSatisfactionHisto <- CaseStudy2 %>% group_by(EnvironmentSatisfaction) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(EnvironmentSatisfaction), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Environment Satisfaction") + ylab("Count") + theme_economist()+xlab("Environment Satisfaction")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+HourlyRateHisto <- CaseStudy2 %>% group_by(HourlyRate) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(HourlyRate), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Hourly Rate") + ylab("Count") + theme_economist()+xlab("Hourly Rate")+
+  theme(axis.text.x = element_text(angle=90, vjust=1, hjust=1))
+
+grid.arrange(BusinessTravelHisto,DailyRateHisto, DepartmentHisto , EnvironmentSatisfactionHisto,HourlyRateHisto, nrow = 2, ncol = 3)
+
+```
+For our second histogram plots we used BusinessTravel, DailyRates, Department, EnvironmentSatisfaction, and HourlyRate. e are able to see trends and use these trends to predict attrition in the future.
+
+Third Plotting
+```{r}
+#THIRD Ploting
+JobInvolvementHisto <- CaseStudy2 %>% group_by(JobInvolvement) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(JobInvolvement), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Job Involvement") + ylab("Count") + theme_economist()+xlab("Job Involvement")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+JobLevelHisto <- CaseStudy2 %>% group_by(JobLevel) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(JobLevel), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Job Level") + ylab("Count") + theme_economist()+xlab("Job Level")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+JobRoleHisto <- CaseStudy2 %>% group_by(JobRole) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(JobRole), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Job Role") + ylab("Count") + theme_economist()+xlab("Job Role")+
+  theme(axis.text.x = element_text(angle=90, vjust=1, hjust=1))
+
+JobSatisfactionHisto <- CaseStudy2 %>% group_by(JobSatisfaction) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(JobSatisfaction), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Job Satisfaction") + ylab("Count") + theme_economist()+xlab("Job Satisfaction")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+MonthlyIncomeHisto <- CaseStudy2 %>% group_by(MonthlyIncome) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(MonthlyIncome), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Monthly Income") + ylab("Count") + theme_economist()+xlab("Monthly Income")+
+  theme(axis.text.x = element_text(angle=90, vjust=1, hjust=1))
+
+grid.arrange(JobInvolvementHisto,JobLevelHisto, JobRoleHisto , JobSatisfactionHisto, MonthlyIncomeHisto, nrow = 2, ncol = 3)
+
+```
+For our third histogram set of plot we looked at JobInvolvement, JobLevel, JobRoles, JobStatisfaction, and MonthlyIncome. We are able to see trends and use these trends to predict attrition in the future.
+
+Fourth Plotting
+```{r}
+#FOURTH Ploting
+NumCompaniesWorkedHisto <- CaseStudy2 %>% group_by(NumCompaniesWorked) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(NumCompaniesWorked), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Number of Companies Worked at") + ylab("Count") + theme_economist()+xlab("Number of Companies Worked at")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+OverTimeHisto <- CaseStudy2 %>% group_by(OverTime) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(OverTime), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Over Time") + ylab("Count") + theme_economist()+xlab("Over Time")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+PercentSalaryHikeHisto <- CaseStudy2 %>% group_by(PercentSalaryHike) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(PercentSalaryHike), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Percent Salary Hike") + ylab("Count") + theme_economist()+xlab("Percent Salary Hike")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+PerformanceRatingHisto <- CaseStudy2 %>% group_by(PerformanceRating) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(PerformanceRating), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Performance Rating") + ylab("Count") + theme_economist()+xlab("Performance Rating")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+RelationshipSatisfactionHisto <- CaseStudy2 %>% group_by(RelationshipSatisfaction) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(RelationshipSatisfaction), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Relationship Satisfaction") + ylab("Count") + theme_economist()+xlab("Relationship Satisfaction")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+grid.arrange(NumCompaniesWorkedHisto, OverTimeHisto, PercentSalaryHikeHisto , PerformanceRatingHisto, RelationshipSatisfactionHisto, nrow = 2, ncol = 3)
+
+```
+Our Fourth set of histogram plots include NumCompaniesWorked, OverTime, PercentSalaryHike, PerformanceRating, and RelationshipSatisfaction. We are able to see trends and use these trends to predict attrition in the future.
+
+Fifth Plotting
+```{r}
+#FIFTH Ploting
+StockOptionLevelHisto <- CaseStudy2 %>% group_by(StockOptionLevel) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(StockOptionLevel), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Stock Option Level") + ylab("Count") + theme_economist()+xlab("Stock Option Level")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+TotalWorkingYearsHisto <- CaseStudy2 %>% group_by(TotalWorkingYears) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(TotalWorkingYears), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Total Working Years") + ylab("Count") + theme_economist()+xlab("Total Working Years")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+TrainingTimesLastYearHisto <- CaseStudy2 %>% group_by(TrainingTimesLastYear) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(TrainingTimesLastYear), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Training Times Last Year") + ylab("Count") + theme_economist()+xlab("Training Times Last Year")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+WorkLifeBalanceHisto <- CaseStudy2 %>% group_by(WorkLifeBalance) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(WorkLifeBalance), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Work Life Balance") + ylab("Count") + theme_economist()+xlab("Work Life Balance")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+grid.arrange(StockOptionLevelHisto,TotalWorkingYearsHisto,TrainingTimesLastYearHisto, WorkLifeBalanceHisto, nrow = 2, ncol = 3)
+
+```
+For our fifth histogram plotting set we used StockOptionLevel, TotalWorkingYears, TrainingTimesLastYear, and WorkLifeBalance. We are able to see trends and use these trends to predict attrition in the future.
+Sixth Plotting
+```{r}
+#SIXTH Ploting
+YearsAtCompanyHisto <- CaseStudy2 %>% group_by(YearsAtCompany) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(YearsAtCompany), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Years At Company") + ylab("Count") + theme_economist()+xlab("Years At Company")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+YearsInCurrentRoleHisto <- CaseStudy2 %>% group_by(YearsInCurrentRole) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(YearsInCurrentRole), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Years In Current Role") + ylab("Count") + theme_economist()+xlab("Years In Current Role")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+YearsSinceLastPromotionHisto <- CaseStudy2 %>% group_by(YearsSinceLastPromotion) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(YearsSinceLastPromotion), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Years Since Last Promotion") + ylab("Count") + theme_economist()+xlab("Years Since Last Promotion")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+YearsWithCurrManagerHisto <- CaseStudy2 %>% group_by(YearsWithCurrManager) %>%  summarise(counts = n()) %>%
+  ggplot(aes(x = as.factor(YearsWithCurrManager), y = counts)) +
+  geom_bar(stat = 'identity', fill = "red",col = "blue") +
+  ggtitle("Years With Curr Manager") + ylab("Count") + theme_economist()+xlab("Years With Curr Manager")+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+
+grid.arrange(YearsAtCompanyHisto,YearsInCurrentRoleHisto, YearsSinceLastPromotionHisto,YearsWithCurrManagerHisto, nrow = 2, ncol = 3)
+
+```
+For our sixth set of histogram plotting sets we used YearsAtCompany, YearsInCurrentRole, YearsSinceLastPromotion, and YearsWithCurrManager. We are able to see trends and use these trends to predict attrition in the future.
+
+Side By Side of every single histogram
+```{r}
+#Every Histogram plotted
+grid.arrange(AgeHisto, GenderHisto, MaritalStatusHisto, EducationHisto, EducationFieldHisto,DistanceFromHomeHisto, nrow = 2, ncol = 3)
+grid.arrange(JobInvolvementHisto,JobLevelHisto, JobRoleHisto , JobSatisfactionHisto, MonthlyIncomeHisto, nrow = 2, ncol = 3)
+grid.arrange(BusinessTravelHisto,DailyRateHisto, DepartmentHisto , EnvironmentSatisfactionHisto,HourlyRateHisto, nrow = 2, ncol = 3)
+grid.arrange(NumCompaniesWorkedHisto, OverTimeHisto, PercentSalaryHikeHisto , PerformanceRatingHisto, RelationshipSatisfactionHisto, nrow = 2, ncol = 3)
+grid.arrange(StockOptionLevelHisto,TotalWorkingYearsHisto,TrainingTimesLastYearHisto, WorkLifeBalanceHisto, nrow = 2, ncol = 3)
+grid.arrange(YearsAtCompanyHisto,YearsInCurrentRoleHisto, YearsSinceLastPromotionHisto,YearsWithCurrManagerHisto, nrow = 2, ncol = 3)
+
+```
+Finally we used the code above to see all the findings side by side so that we can see trends and important information.
+
+
+Interesting findings include
+ -Performance Rating: This was more than likely self based and a high possible reason for attrition would be low performance rating, however in this data we only see high and very   high. Therefore, we will leave this column out.
+ -TotalWorkingYears: very similar to YearsAtCompany, therefore we will only keep YearsAtCompany and remove Total working Years
+
+Now I would like to compare attrition to every category/variable to determine what the top 3 causes of attrition are
+```{r}
+#Age vs Attrition 
+AgePercent <- CaseStudy2 %>%
+  count(Age, Attrition) %>%
+  group_by(Age) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+
+ggplot(AgePercent, aes(x = Age, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Age") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#BusinessTravel vs Attrition 
+BusinessTravelPercent <- CaseStudy2 %>%
+  count(BusinessTravel, Attrition) %>%
+  group_by(BusinessTravel) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(BusinessTravelPercent, aes(x = BusinessTravel, y = n, fill = Attrition)) +
+  ggtitle("Attrition by BusinessTravel") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#DailyRate vs Attrition 
+DailyRatesPercent <- CaseStudy2 %>%
+  count(DailyRate, Attrition) %>%
+  group_by(DailyRate) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(DailyRatesPercent, aes(x = DailyRate, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Daily Rate") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#Department vs Attrition 
+DepartmentPercent <- CaseStudy2 %>%
+  count(Department, Attrition) %>%
+  group_by(Department) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(DepartmentPercent, aes(x = Department, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Department") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#DistanceFromHome vs Attrition 
+DistanceFromHomePercent <- CaseStudy2 %>%
+  count(DistanceFromHome, Attrition) %>%
+  group_by(DistanceFromHome) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(DistanceFromHomePercent, aes(x = DistanceFromHome, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Distance From Home") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+```
+For our first set of attrition we used the histogram code to interpretation and color coordinate attrition rates. We Found the attrition percentages of each category in the variables Age, BusinessTravel, DailyRate, Department, and DistanceFromHome.
+
+
+```{r}
+#Education vs Attrition 
+EducationPercent <- CaseStudy2 %>%
+  count(Education, Attrition) %>%
+  group_by(Education) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(EducationPercent, aes(x = Education, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Education") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+#EducationField vs Attrition 
+EducationFieldPercent <- CaseStudy2 %>%
+  count(EducationField, Attrition) %>%
+  group_by(EducationField) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(EducationFieldPercent, aes(x = EducationField, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Education Field") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#EnvironmentSatisfaction vs Attrition 
+EnvironmentSatisfactionPercent <- CaseStudy2 %>%
+  count(EnvironmentSatisfaction, Attrition) %>%
+  group_by(EnvironmentSatisfaction) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(EnvironmentSatisfactionPercent, aes(x = EnvironmentSatisfaction, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Environment Satisfaction") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#Gender vs Attrition 
+GenderPercent <- CaseStudy2 %>%
+  count(Gender, Attrition) %>%
+  group_by(Gender) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(GenderPercent, aes(x = Gender, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Gender") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#HourlyRate vs Attrition 
+HourlyRatePercent <- CaseStudy2 %>%
+  count(HourlyRate, Attrition) %>%
+  group_by(HourlyRate) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(HourlyRatePercent, aes(x = HourlyRate, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Hourly Rate") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+```
+For our second set of attrition we used the histogram code to interpretation and color coordinate attrition rates. We Found the attrition percentages of each category in the variables HourlyRate,Gender, EnvironmentSatisfaction, EducationField, and Education.
+
+```{r}
+#JobInvolvement vs Attrition 
+JobInvolvementPercent <- CaseStudy2 %>%
+  count(JobInvolvement, Attrition) %>%
+  group_by(JobInvolvement) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(JobInvolvementPercent, aes(x = JobInvolvement, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Job Involvement") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+
+#JobLevel vs Attrition 
+JobLevelPercent <- CaseStudy2 %>%
+  count(JobLevel, Attrition) %>%
+  group_by(JobLevel) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(JobLevelPercent, aes(x = JobLevel, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Job Level") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#JobRole vs Attrition 
+JobRolePercent <- CaseStudy2 %>%
+  count(JobRole, Attrition) %>%
+  group_by(JobRole) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(JobRolePercent, aes(x = JobRole, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Job Role") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+
+
+#JobSatisfaction vs Attrition 
+JobSatisfactionPercent <- CaseStudy2 %>%
+  count(JobSatisfaction, Attrition) %>%
+  group_by(JobSatisfaction) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(JobSatisfactionPercent, aes(x = JobSatisfaction, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Job Satisfaction") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+```
+For our third set of attrition we used the histogram code to interpretation and color coordinate attrition rates. We Found the attrition percentages of each category in the variables JobSatisfaction, JobRole, JobLevel, and JobInvolvement.
+
+```{r}
+#MaritalStatus vs Attrition 
+MaritalStatusPercent <- CaseStudy2 %>%
+  count(MaritalStatus, Attrition) %>%
+  group_by(MaritalStatus) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(MaritalStatusPercent, aes(x = MaritalStatus, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Marital Status") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#MonthlyIncome vs Attrition 
+MonthlyIncomePercent <- CaseStudy2 %>%
+  count(MonthlyIncome, Attrition) %>%
+  group_by(MonthlyIncome) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(MonthlyIncomePercent, aes(x = MonthlyIncome, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Monthly Income") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1))
+
+#NumCompaniesWorked vs Attrition 
+NumCompaniesWorkedPercent <- CaseStudy2 %>%
+  count(NumCompaniesWorked, Attrition) %>%
+  group_by(NumCompaniesWorked) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(NumCompaniesWorkedPercent, aes(x = NumCompaniesWorked, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Number Of Companies Worked At") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#OverTime vs Attrition 
+OverTimePercent <- CaseStudy2 %>%
+  count(OverTime, Attrition) %>%
+  group_by(OverTime) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(OverTimePercent, aes(x = OverTime, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Over Time") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#PercentSalaryHike vs Attrition 
+PercentSalaryHikePercent <- CaseStudy2 %>%
+  count(PercentSalaryHike, Attrition) %>%
+  group_by(PercentSalaryHike) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(PercentSalaryHikePercent, aes(x = PercentSalaryHike, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Percent Salary Hike") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+```
+For our fourth set of attrition we used the histogram code to interpretation and color coordinate attrition rates. We Found the attrition percentages of each category in the variables PercentSalaryHike, OverTime, NumCompaniesWorked, MonthlyIncome, and MaritalStatus.
+
+```{r}
+#RelationshipSatisfaction vs Attrition 
+RelationshipSatisfactionPercent <- CaseStudy2 %>%
+  count(RelationshipSatisfaction , Attrition) %>%
+  group_by(RelationshipSatisfaction) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(RelationshipSatisfactionPercent, aes(x = RelationshipSatisfaction, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Relationship Satisfaction") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#StockOptionLevel vs Attrition 
+StockOptionLevelPercent <- CaseStudy2 %>%
+  count(StockOptionLevel, Attrition) %>%
+  group_by(StockOptionLevel) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(StockOptionLevelPercent, aes(x = StockOptionLevel, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Stock Option Level") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#TotalWorkingYears vs Attrition 
+TotalWorkingYearsPercent <- CaseStudy2 %>%
+  count(TotalWorkingYears, Attrition) %>%
+  group_by(TotalWorkingYears) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(TotalWorkingYearsPercent, aes(x = TotalWorkingYears, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Total Working Years") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#TrainingTimeLastYear vs Attrition 
+TrainingTimesLastYearPercent <- CaseStudy2 %>%
+  count(TrainingTimesLastYear, Attrition) %>%
+  group_by(TrainingTimesLastYear) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(TrainingTimesLastYearPercent, aes(x = TrainingTimesLastYear, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Training Times Last Year") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#WorkLifeBalance vs Attrition 
+WorkLifeBalancePercent <- CaseStudy2 %>%
+  count(WorkLifeBalance, Attrition) %>%
+  group_by(WorkLifeBalance) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(WorkLifeBalancePercent, aes(x = WorkLifeBalance, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Work Life Balance") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+```
+For our fifth set of attrition we used the histogram code to interpretation and color coordinate attrition rates. We Found the attrition percentages of each category in the variables WorkLifeBalance, TrainingTimeLastYear, TotalWorkingYears, StockOptionLevel, and RelationshipSatisfaction.
+
+```{r}
+#YearsAtCompany vs Attrition 
+YearsAtCompanyPercent <- CaseStudy2 %>%
+  count(YearsAtCompany, Attrition) %>%
+  group_by(YearsAtCompany) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(YearsAtCompanyPercent, aes(x = YearsAtCompany, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Years At Company") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))+
+  theme(axis.text.x = element_text(angle=45, vjust=1, hjust=1)) 
+
+
+#YearsInCurrentRole vs Attrition 
+YearsInCurrentRolePercent <- CaseStudy2 %>%
+  count(YearsInCurrentRole, Attrition) %>%
+  group_by(YearsInCurrentRole) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(YearsInCurrentRolePercent, aes(x = YearsInCurrentRole, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Years In Current Role") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#YearsSinceLastPromotion vs Attrition 
+YearsSinceLastPromotionPercent <- CaseStudy2 %>%
+  count(YearsSinceLastPromotion, Attrition) %>%
+  group_by(YearsSinceLastPromotion) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(YearsSinceLastPromotionPercent, aes(x = YearsSinceLastPromotion, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Years Since Last Promotion") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+
+#YearsWithCurrManager vs Attrition 
+YearsWithCurrManagerPercent <- CaseStudy2 %>%
+  count(YearsWithCurrManager, Attrition) %>%
+  group_by(YearsWithCurrManager) %>%
+  mutate(ratio = n / sum(n),
+         label = paste0(sprintf("%.1f", ratio * 100), "%"))
+
+ggplot(YearsWithCurrManagerPercent, aes(x = YearsWithCurrManager, y = n, fill = Attrition)) +
+  ggtitle("Attrition by Years With Current Manager") +
+  ylab("Count") +
+  scale_fill_brewer(palette = "Paired", direction = -1) +
+  theme_economist() +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = label, y = n/2), position = position_stack(vjust = 0.5))
+
+```
+For our sixth set of attrition we used the histogram code to interpretation and color coordinate attrition rates. We Found the attrition percentages of each category in the variables YearsWithCurrManager, 
+YearsSinceLastPromotion, YearsInCurrentRole, and YearsAtCompany.
+
+We will now use Naive Bayes to predict attrition
+```{r}
+# Create a multiple regression model to determine linearity
+model <- lm( Attrition_num  ~ Age+BusinessTravel+DistanceFromHome+EnvironmentSatisfaction+Gender+JobInvolvement+JobSatisfaction+MaritalStatus+NumCompaniesWorked+OverTime+PercentSalaryHike+RelationshipSatisfaction+TotalWorkingYears+TrainingTimesLastYear+WorkLifeBalance+YearsAtCompany+YearsInCurrentRole+YearsSinceLastPromotion+YearsWithCurrManager , data = CaseStudy2)
+
+# Summarize the model
+summary(model)
+
+```
+In the code above we inserted all 30 variables we are still interested in, into our linear regression model to determine colinearity. We will identify values without linearity and remove them until we find a model that will best predict attrition.
+
+First Naive Bayes model with no over or under sampling a.k.a the raw data
+```{r}
+#NB model loop
+iterations = 100
+
+masterAcc = matrix(nrow = iterations)
+masterSen = matrix(nrow = iterations)
+masterSpec = matrix(nrow = iterations)
+
+splitPerc = 0.7 #Training / Test split Percentage
+
+for(j in 1:iterations) {
+  
+  trainIndices = sample(seq(1:length(CaseStudy2$ID)), round(splitPerc * length(CaseStudy2$ID)))
+  train = CaseStudy2[trainIndices, ]
+  test = CaseStudy2[-trainIndices, ]
+  
+  model = naiveBayes(Attrition_num ~ Age + BusinessTravel + DistanceFromHome +
+                       EnvironmentSatisfaction + Gender + JobInvolvement +
+                       JobSatisfaction + MaritalStatus + NumCompaniesWorked +
+                       OverTime + PercentSalaryHike + RelationshipSatisfaction +
+                       TotalWorkingYears + TrainingTimesLastYear + WorkLifeBalance +
+                       YearsAtCompany + YearsInCurrentRole + YearsSinceLastPromotion +
+                       YearsWithCurrManager, data = train, laplace = 1)
+  
+  table(predict(model, test), test$Attrition_num)
+  
+  CM = confusionMatrix(table(predict(model, test), test$Attrition_num))
+  masterAcc[j] = CM$overall[1]
+  masterSen[j] = CM$byClass[1]
+  masterSpec[j] = CM$byClass[2]
+}
+
+MeanAcc = colMeans(masterAcc)
+MeanAcc
+
+MeanSen = colMeans(masterSen)
+MeanSen
+
+MeanSpec = colMeans(masterSpec)
+MeanSpec
+
+
+```
+The code above is a loop that will split our main data set with all values accounted for and run a loop 100 times with our model we made prior. Once our model is run 100 times, we will then receive the mean accuracy, sensitivity, and specificity of all 100 time. We will then compare these finding with our other loops/models and proceed with the best model.
+
+Down Sampling Attrition column
+```{r}
+#Down Sampling
+yes = which(CaseStudy2$Attrition_num=="1")
+no= which(CaseStudy2$Attrition_num=="0")
+length(yes)
+length(no)
+no.downsample= sample(no,length(yes))
+CaseStudy2.down=CaseStudy2[c(no.downsample,yes),]
+view(CaseStudy2.down)
+histogram(CaseStudy2.down$Attrition_num)
+
+
+#NB model loop WITH DOWNSAMPLING
+iterations = 100
+
+masterAcc = matrix(nrow = iterations)
+masterSen = matrix(nrow = iterations)
+masterSpec = matrix(nrow = iterations)
+
+splitPerc = 0.7 #Training / Test split Percentage
+
+for(j in 1:iterations) {
+  
+  trainIndices = sample(seq(1:length(CaseStudy2.down$ID)), round(splitPerc * length(CaseStudy2.down$ID)))
+  train = CaseStudy2.down[trainIndices, ]
+  test = CaseStudy2.down[-trainIndices, ]
+  
+  model = naiveBayes(Attrition_num ~ Age + BusinessTravel + DistanceFromHome +
+                       EnvironmentSatisfaction + Gender + JobInvolvement +
+                       JobSatisfaction + MaritalStatus + NumCompaniesWorked +
+                       OverTime + PercentSalaryHike + RelationshipSatisfaction +
+                       TotalWorkingYears + TrainingTimesLastYear + WorkLifeBalance +
+                       YearsAtCompany + YearsInCurrentRole + YearsSinceLastPromotion +
+                       YearsWithCurrManager, data = train, laplace = 1)
+  
+  table(predict(model, test), test$Attrition_num)
+  
+  CM = confusionMatrix(table(predict(model, test), test$Attrition_num))
+  masterAcc[j] = CM$overall[1]
+  masterSen[j] = CM$byClass[1]
+  masterSpec[j] = CM$byClass[2]
+}
+
+MeanAcc = colMeans(masterAcc)
+MeanAcc
+
+MeanSen = colMeans(masterSen)
+MeanSen
+
+MeanSpec = colMeans(masterSpec)
+MeanSpec
+
+```
+The code above down samples our attrition column in order to raise specificity. Our attrition column was heavely one sided with the "No" values. Therefore, we used code to down sample the "No" column so that it was 50/50 with the "Yes" column. We do lose a large amount of variables so we will assess the output and decided after running all of the models.
+
+Up Sampling Attrition column
+```{r}
+##upsampling
+yes.upsampling= sample(yes,length(no), replace = TRUE)
+length(yes.upsampling)
+CaseStudy2.up = CaseStudy2[c(yes.upsampling,no),]
+histogram(CaseStudy2.up$Attrition_num)
+
+
+#NB model loop WITH UP SAMPLING
+iterations = 100
+
+masterAcc = matrix(nrow = iterations)
+masterSen = matrix(nrow = iterations)
+masterSpec = matrix(nrow = iterations)
+
+splitPerc = 0.7 #Training / Test split Percentage
+
+for(j in 1:iterations) {
+  
+  trainIndices = sample(seq(1:length(CaseStudy2.up$ID)), round(splitPerc * length(CaseStudy2.up$ID)))
+  train = CaseStudy2.up[trainIndices, ]
+  test = CaseStudy2.up[-trainIndices, ]
+  
+  model = naiveBayes(Attrition_num ~ Age + BusinessTravel + DistanceFromHome +
+                       EnvironmentSatisfaction + Gender + JobInvolvement +
+                       JobSatisfaction + MaritalStatus + NumCompaniesWorked +
+                       OverTime + PercentSalaryHike + RelationshipSatisfaction +
+                       TotalWorkingYears + TrainingTimesLastYear + WorkLifeBalance +
+                       YearsAtCompany + YearsInCurrentRole + YearsSinceLastPromotion +
+                       YearsWithCurrManager, data = train, laplace = 1)
+  
+  table(predict(model, test), test$Attrition_num)
+  
+  CM = confusionMatrix(table(predict(model, test), test$Attrition_num))
+  masterAcc[j] = CM$overall[1]
+  masterSen[j] = CM$byClass[1]
+  masterSpec[j] = CM$byClass[2]
+}
+
+MeanAcc = colMeans(masterAcc)
+MeanAcc
+
+MeanSen = colMeans(masterSen)
+MeanSen
+
+MeanSpec = colMeans(masterSpec)
+MeanSpec
+
+```
+Just as we did for the downsampling prior we will now up sample the "Yes" values in the attrition column. With the code provided above we upsampled the "Yes" column so that we have a 50/50 split with the "No" column. We will then run the 100 iteration code and find the mean accuracy, sensitivity, and specificity.
+
+Note: We decided to use te up sampled model because it had the best mean accuracy, sensitivity, and specificity.
+
+
+Use the Up sampled model to predict attrition for 300 people
+```{r}
+# Train the Naive Bayes model on the full dataset
+model <- naiveBayes(Attrition_num ~ Age + BusinessTravel + DistanceFromHome +
+                      EnvironmentSatisfaction + Gender + JobInvolvement +
+                      JobSatisfaction + MaritalStatus + NumCompaniesWorked +
+                      OverTime + PercentSalaryHike + RelationshipSatisfaction +
+                      TotalWorkingYears + TrainingTimesLastYear + WorkLifeBalance +
+                      YearsAtCompany + YearsInCurrentRole + YearsSinceLastPromotion +
+                      YearsWithCurrManager, data = CaseStudy2.up, laplace = 1)
+
+# Make predictions on the test data and add results to a new dataframe
+Attritionpredictions <- data.frame(ID = NoAttrition$ID, 
+                          Pred_attrition = predict(model, newdata = NoAttrition))
+
+# Print first few rows of the predictions dataframe
+head(Attritionpredictions)
+
+```
+The code above will use our selected model and run our prediction with the 300 observations with no attrition. Our code will predict the 300 attrition values and provide a dataframe with the attrition rates, along with the corresponding ID number.
+
+
+Linear Regression For Monthly Income Predictions
+```{r}
+##We will now find the MSRE with a linear Regression
+numMSPEs = 100
+MSPEHolderModel1 = numeric(numMSPEs)
+MSPEHolderModel2 = numeric(numMSPEs)
+for (i in 1:numMSPEs)
+{
+  TrainObs = sample(seq(1,dim(CaseStudy3)[1]),round(.75*dim(CaseStudy3)[1]),replace = FALSE)
+  CaseTrain = CaseStudy3[TrainObs,]
+  CaseTrain
+  CaseTest = CaseStudy3[-TrainObs,]
+  CaseTest
+  Model1_fit = lm(MonthlyIncome ~ DailyRate+HourlyRate+JobInvolvement+JobLevel+MonthlyRate+ 
+                    OverTime+PercentSalaryHike+YearsAtCompany+YearsInCurrentRole+
+                    YearsSinceLastPromotion+YearsWithCurrManager, data = CaseTrain)
+  Model1_Preds = predict(Model1_fit, newdata = CaseTest)
+  
+  #MSPE Model 1
+  MSPE = mean((CaseTest$MonthlyIncome - Model1_Preds)^2)
+  MSPE
+  MSPEHolderModel1[i] = MSPE
+  
+  #Model 2
+  Model2_fit = lm(MonthlyIncome ~ DailyRate+HourlyRate+JobInvolvement+JobLevel+MonthlyRate+ 
+                    OverTime+PercentSalaryHike, data = CaseTrain)
+  Model2_Preds = predict(Model2_fit,newdata = CaseTest)
+  MSPE = mean((CaseTest$MonthlyIncome - Model2_Preds)^2)
+  MSPE
+  MSPEHolderModel2[i] = MSPE
+  
+}
+mean(MSPEHolderModel1)
+mean(MSPEHolderModel2)
+
+# RMSE Model 1
+RMSE_Model1 <- sqrt(mean((CaseTest$MonthlyIncome - Model1_Preds)^2))
+RMSE_Model1
+
+# RMSE Model 2
+RMSE_Model2 <- sqrt(mean((CaseTest$MonthlyIncome - Model2_Preds)^2))
+RMSE_Model2
+
+```
+The code above is a linear regression model that can predict numeric values. I took the complete data set and divided it into two split set so that I was able to check MSPE and RMSE. After running both my models I will be able to see the best preforming model and use that model to predict 300 observations monthly incomes.
+
+Use the Up sampled model to predict Monthly for 300 people
+```{r}
+#Now we can run out model on the Test set for prediction
+
+Pred_NoSalary <- data.frame(ID = NoSalary2$ID, 
+                            Pred_MonthlyIncome=predict(Model2_fit, newdata = NoSalary2))
+
+# Print first few rows of the predictions dataframe
+view(Pred_NoSalary)
+
+```
+The code above will use our selected model and run our prediction with the 300 observations with no monthlyIncome. Our code will predict the 300 Monthly Income values and provide a data frame with the Monthly Income rates, along with the corresponding ID number.
+
+
+Youtube Video:https://youtu.be/cj8cStO1iHY 
+RShiny: https://nickmueller2.shinyapps.io/CaseStudy2/?_ga=2.246030916.1507764569.1681333365-408874730.1680987412
+
+
+Conclusion:
+Throughout this RMD and Knit file I was able to visually and statistically see several aspect of the data. I was able to display trends that led to attrition, along with the top 3 factors that led to attrition. I was able to show job specific trends along with many interesting findings. I was also able to run two functioning models, one being the Naive Bayes and the other a linear regression. With the help of these two models I was able to predict possible attrition and monthly incomes. Thank you so much for following along. Email nmueller@smu.edu for any questions.
+
+
+
+
